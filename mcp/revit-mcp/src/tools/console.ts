@@ -1,180 +1,195 @@
 import { z } from "zod";
 import { type InferSchema } from "xmcp";
-import { exec } from "child_process";
-import { promisify } from "util";
-
-const execAsync = promisify(exec);
+import { readdir, readFile, stat } from 'fs/promises';
+import { join } from 'path';
+import { homedir } from 'os';
 
 // Define the schema for tool parameters
 export const schema = {
-  command: z.string().describe("Command to execute in the console"),
-  timeout: z.number().min(1000).max(30000).default(5000).describe("Timeout in milliseconds (1-30 seconds)"),
-  shell: z.enum(["cmd", "powershell", "bash"]).default("cmd").describe("Shell to use for execution"),
+  action: z.enum(['list', 'read_latest', 'read_file', 'tail']).describe('Action to perform: list journal files, read latest journal, read specific file, or tail latest journal'),
+  filename: z.string().optional().describe('Specific journal filename to read (only required for read_file action)'),
+  lines: z.number().min(1).max(1000).default(50).describe('Number of lines to read from the end (for tail action, default: 50)')
 };
 
 // Define tool metadata
 export const metadata = {
-  name: "console",
-  description: "Execute console commands and return output. Useful for checking running processes, bringing windows to front, etc.",
+  name: "revit_journals",
+  description: "Access Revit journal files from the current session only. Provides secure, read-only access to Revit's journal files for debugging and monitoring purposes.",
   annotations: {
-    title: "MCP Console",
-    readOnlyHint: false,
-    destructiveHint: true,
-    idempotentHint: false,
+    title: "Revit Journals",
+    readOnlyHint: true,
+    destructiveHint: false,
+    idempotentHint: true,
   },
 };
 
-// Helper function to check if Revit is running
-async function checkRevitRunning(): Promise<{ isRunning: boolean; processes: string[] }> {
+async function getRevitJournalsPath(): Promise<string> {
+  const userHome = homedir();
+  return join(userHome, 'AppData', 'Local', 'Autodesk', 'Revit', 'Autodesk Revit 2026', 'Journals');
+}
+
+async function getCurrentSessionJournals(): Promise<string[]> {
+  const journalsPath = await getRevitJournalsPath();
+  
   try {
-    const { stdout } = await execAsync('tasklist /FI "IMAGENAME eq Revit.exe" /FO CSV', { timeout: 5000 });
-    const lines = stdout.split('\n').filter(line => line.includes('Revit.exe'));
-    return {
-      isRunning: lines.length > 0,
-      processes: lines
-    };
+    const files = await readdir(journalsPath);
+    const journalFiles = files.filter(file => file.endsWith('.txt') || file.endsWith('.log'));
+    
+    // Get file stats to sort by modification time (most recent first)
+    const filesWithStats = await Promise.all(
+      journalFiles.map(async (file) => {
+        const filePath = join(journalsPath, file);
+        const stats = await stat(filePath);
+        return { file, mtime: stats.mtime };
+      })
+    );
+    
+    // Sort by modification time, most recent first
+    filesWithStats.sort((a, b) => b.mtime.getTime() - a.mtime.getTime());
+    
+    return filesWithStats.map(item => item.file);
   } catch (error) {
-    console.error("Error checking Revit:", error);
-    return { isRunning: false, processes: [] };
+    throw new Error(`Cannot access Revit journals directory: ${error}`);
   }
 }
 
-// Helper function to bring Revit to front
-async function bringRevitToFront(): Promise<{ success: boolean; message: string }> {
+async function readJournalFile(filename: string): Promise<string> {
+  const journalsPath = await getRevitJournalsPath();
+  const filePath = join(journalsPath, filename);
+  
+  // Security check: ensure the file is within the journals directory
+  if (!filePath.startsWith(journalsPath)) {
+    throw new Error('Access denied: file must be within Revit journals directory');
+  }
+  
   try {
-    // First check if Revit is running
-    const revitCheck = await checkRevitRunning();
-    if (!revitCheck.isRunning) {
-      return { success: false, message: "Revit is not running" };
-    }
-
-    // Use PowerShell to bring Revit window to front
-    const psCommand = `
-Add-Type -AssemblyName Microsoft.VisualBasic
-Add-Type -AssemblyName System.Windows.Forms
-$revitProcess = Get-Process -Name "Revit" -ErrorAction SilentlyContinue
-if ($revitProcess) {
-    $revitProcess | ForEach-Object {
-        if ($_.MainWindowTitle -ne "") {
-            [Microsoft.VisualBasic.Interaction]::AppActivate($_.Id)
-            [System.Windows.Forms.SendKeys]::SendWait("%{TAB}")
-            Write-Output "Revit window brought to front: $($_.MainWindowTitle)"
-        }
-    }
-} else {
-    Write-Output "No Revit process found"
-}
-    `;
-
-    const { stdout } = await execAsync(`powershell -Command "${psCommand}"`, { timeout: 10000 });
-    return { success: true, message: stdout.trim() };
+    const content = await readFile(filePath, 'utf8');
+    return content;
   } catch (error) {
-    return { success: false, message: `Error bringing Revit to front: ${error instanceof Error ? error.message : String(error)}` };
+    throw new Error(`Cannot read journal file ${filename}: ${error}`);
+  }
+}
+
+async function tailJournalFile(filename: string, lines: number = 50): Promise<string> {
+  const journalsPath = await getRevitJournalsPath();
+  const filePath = join(journalsPath, filename);
+  
+  // Security check: ensure the file is within the journals directory
+  if (!filePath.startsWith(journalsPath)) {
+    throw new Error('Access denied: file must be within Revit journals directory');
+  }
+  
+  try {
+    const content = await readFile(filePath, 'utf8');
+    const allLines = content.split('\n');
+    const lastLines = allLines.slice(-lines);
+    return lastLines.join('\n');
+  } catch (error) {
+    throw new Error(`Cannot tail journal file ${filename}: ${error}`);
   }
 }
 
 // Tool implementation
-export default async function console({ command, timeout, shell }: InferSchema<typeof schema>) {
+export default async function revitJournals({ action, filename, lines = 50 }: InferSchema<typeof schema>) {
   try {
-    const timestamp = Date.now();
-    
-    // Handle special commands
-    if (command.toLowerCase() === "check-revit" || command.toLowerCase() === "revit-status") {
-      const result = await checkRevitRunning();
-      return {
-        content: [
-          {
-            type: "text",
-            text: `🔍 **Revit Status Check**\n\n` +
-                  `**Status**: ${result.isRunning ? '✅ Running' : '❌ Not Running'}\n` +
-                  `**Processes Found**: ${result.processes.length}\n\n` +
-                  (result.processes.length > 0 ? 
-                    `**Process Details**:\n${result.processes.join('\n')}` : 
-                    'No Revit processes detected'),
-          },
-        ],
-      };
-    }
-
-    if (command.toLowerCase() === "bring-revit-front" || command.toLowerCase() === "focus-revit") {
-      const result = await bringRevitToFront();
-      return {
-        content: [
-          {
-            type: "text",
-            text: `🎯 **Bring Revit to Front**\n\n` +
-                  `**Result**: ${result.success ? '✅ Success' : '❌ Failed'}\n` +
-                  `**Message**: ${result.message}`,
-          },
-        ],
-      };
-    }
-
-    if (command.toLowerCase() === "help" || command.toLowerCase() === "commands") {
-      return {
-        content: [
-          {
-            type: "text",
-            text: `🖥️ **MCP Console Help**\n\n` +
-                  `**Special Commands**:\n` +
-                  `• \`check-revit\` or \`revit-status\` - Check if Revit is running\n` +
-                  `• \`bring-revit-front\` or \`focus-revit\` - Bring Revit window to front\n` +
-                  `• \`help\` or \`commands\` - Show this help\n\n` +
-                  `**General Commands**:\n` +
-                  `• \`tasklist\` - List running processes\n` +
-                  `• \`tasklist /FI "IMAGENAME eq *.exe"\` - Filter processes\n` +
-                  `• \`dir\` - List directory contents\n` +
-                  `• Any Windows command line command\n\n` +
-                  `**Shells Available**: cmd (default), powershell, bash`,
-          },
-        ],
-      };
-    }
-
-    // Execute regular command
-    let shellCommand: string;
-    switch (shell) {
-      case "powershell":
-        shellCommand = `powershell -Command "${command}"`;
-        break;
-      case "bash":
-        shellCommand = `bash -c "${command}"`;
-        break;
+    switch (action) {
+      case 'list':
+        const journals = await getCurrentSessionJournals();
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `Available Revit journal files (sorted by most recent):\n${journals.join('\n')}`
+            }
+          ]
+        };
+      
+      case 'read_latest':
+        const latestJournals = await getCurrentSessionJournals();
+        if (latestJournals.length === 0) {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: 'No journal files found'
+              }
+            ]
+          };
+        }
+        
+        const latestContent = await readJournalFile(latestJournals[0]);
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `Latest journal file: ${latestJournals[0]}\n\n${latestContent}`
+            }
+          ]
+        };
+      
+      case 'read_file':
+        if (!filename) {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: 'Error: filename is required for read_file action'
+              }
+            ]
+          };
+        }
+        
+        const fileContent = await readJournalFile(filename);
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `Journal file: ${filename}\n\n${fileContent}`
+            }
+          ]
+        };
+      
+      case 'tail':
+        const tailJournals = await getCurrentSessionJournals();
+        if (tailJournals.length === 0) {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: 'No journal files found'
+              }
+            ]
+          };
+        }
+        
+        const tailContent = await tailJournalFile(tailJournals[0], lines);
+        return {
+          content: [
+            {
+              type: 'text',
+              text: `Last ${lines} lines of ${tailJournals[0]}:\n\n${tailContent}`
+            }
+          ]
+        };
+      
       default:
-        shellCommand = command;
+        return {
+          content: [
+            {
+              type: 'text',
+              text: 'Error: Invalid action. Use: list, read_latest, read_file, or tail'
+            }
+          ]
+        };
     }
-
-    const { stdout, stderr } = await execAsync(shellCommand, { 
-      timeout,
-      maxBuffer: 5 * 1024 * 1024 // 5MB buffer
-    });
-
-    const output = stdout || stderr || "Command executed (no output)";
-    
+  } catch (error: any) {
     return {
       content: [
         {
-          type: "text",
-          text: `💻 **Console Output** (${shell})\n\n` +
-                `**Command**: \`${command}\`\n` +
-                `**Executed at**: ${new Date(timestamp).toLocaleString()}\n\n` +
-                `**Output**:\n\`\`\`\n${output}\n\`\`\``,
-        },
-      ],
-    };
-  } catch (error) {
-    console.error("Console command error:", error);
-    return {
-      content: [
-        {
-          type: "text",
-          text: `❌ **Console Error**\n\n` +
-                `**Command**: \`${command}\`\n` +
-                `**Shell**: ${shell}\n` +
-                `**Error**: ${error instanceof Error ? error.message : String(error)}\n\n` +
-                `**Tip**: Try using \`help\` to see available commands`,
-        },
-      ],
+          type: 'text',
+          text: `Error: ${error.message}`
+        }
+      ]
     };
   }
-} 
+}

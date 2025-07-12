@@ -1,6 +1,6 @@
 {
     "mcpServers": {
-      "revit-mcp.": {
+      "revit-mcp!!/1!": {
         "command": "node",
         "args": ["C:/Users/leobr/Workspace/challenges/mcp/revit-mcp/dist/stdio.js"],
         "env": {
