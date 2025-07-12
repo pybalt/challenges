@@ -1,0 +1,11 @@
+{
+    "mcpServers": {
+      "revit-mcp--": {
+        "command": "node",
+        "args": ["C:/Users/leobr/Workspace/challenges/mcp/revit-mcp/dist/stdio.js"],
+        "env": {
+          "NODE_ENV": "production"
+        }
+      }
+    }
+  } 
