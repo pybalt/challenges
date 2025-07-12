@@ -38,15 +38,15 @@ export default async function captureScreen({ region, format, quality, resize }:
     // Simple PowerShell command
     const psCommand = `powershell -Command "Add-Type -AssemblyName System.Windows.Forms,System.Drawing; $screen = [System.Windows.Forms.Screen]::PrimaryScreen; $bounds = $screen.Bounds; $bitmap = New-Object System.Drawing.Bitmap($bounds.Width, $bounds.Height); $graphics = [System.Drawing.Graphics]::FromImage($bitmap); $graphics.CopyFromScreen($bounds.Location, [System.Drawing.Point]::Empty, $bounds.Size); $ms = New-Object System.IO.MemoryStream; $bitmap.Save($ms, [System.Drawing.Imaging.ImageFormat]::Png); $bytes = $ms.ToArray(); $base64 = [Convert]::ToBase64String($bytes); Write-Output $base64; $graphics.Dispose(); $bitmap.Dispose(); $ms.Dispose()"`;
     
-    // Execute with aggressive timeout
+    // Execute with increased buffer for high quality
     const base64 = await new Promise<string>((resolve, reject) => {
       const timeoutId = setTimeout(() => {
-        reject(new Error('PowerShell timeout after 3 seconds'));
-      }, 3000);
+        reject(new Error('PowerShell timeout after 10 seconds'));
+      }, 10000);
       
       exec(psCommand, { 
-        timeout: 3000,
-        maxBuffer: 10 * 1024 * 1024 // 10MB buffer
+        timeout: 10000,
+        maxBuffer: 50 * 1024 * 1024 // 50MB buffer for high quality images
       }, (error, stdout, stderr) => {
         clearTimeout(timeoutId);
         
