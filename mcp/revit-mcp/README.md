@@ -1,12 +1,12 @@
 # Revit Screen Capture MCP
 
-A Model Context Protocol (MCP) server that provides **real screen capture and keyboard automation** capabilities for Revit and other applications, built using the XMCP framework.
+A Model Context Protocol (MCP) server that provides **real screen capture and Revit journal access** capabilities for Revit and other applications, built using the XMCP framework.
 
 ## ✅ Current Status
 
 - **Framework**: ✅ Successfully implemented using XMCP
 - **Screen Capture**: ✅ Real screen capture using PowerShell and Windows .NET APIs
-- **Keyboard Automation**: ✅ Real keyboard automation using PowerShell SendKeys
+- **Revit Journals**: ✅ Access to Revit journal files for the current session.
 - **Server**: ✅ Running correctly with STDIO transport
 - **Production Ready**: ✅ Fully functional for Cursor and Claude Desktop
 
@@ -30,23 +30,19 @@ Captures the current screen or a specific region and returns as base64 image usi
 }
 ```
 
-### 2. `send_keys`
-Sends keyboard input to the active window using Windows SendKeys with support for key combinations and special keys.
+### 2. `revit_journals`
+Access Revit journal files from the current session only. Provides secure, read-only access to Revit's journal files for debugging and monitoring purposes.
 
 **Parameters:**
-- `keys` (required): Keys to send
-  - Text: `"Hello World"`
-  - Shortcuts: `"ctrl+s"`, `"alt+tab"`
-  - Special keys: `"[enter]"`, `"[tab]"`
-- `delay` (optional): Delay before sending keys in milliseconds (default: 100)
-- `simultaneous` (optional): Press key combinations simultaneously (default: true)
+- `action` (required): 'list', 'read_latest', 'read_file', or 'tail'
+- `filename` (optional): Specific journal filename to read
+- `lines` (optional): Number of lines to read from the end (for tail action)
 
 **Example Usage:**
 ```json
 {
-  "keys": "ctrl+s",
-  "delay": 100,
-  "simultaneous": true
+  "action": "tail",
+  "lines": 100
 }
 ```
 
@@ -100,33 +96,15 @@ npm run start-http
    }
    ```
 
-### Claude Desktop Configuration
-
-Add to your Claude Desktop configuration file:
-
-```json
-{
-  "mcpServers": {
-    "revit-screen-capture": {
-      "command": "node",
-      "args": ["C:/Users/leobr/Workspace/challenges/mcp/revit-mcp/dist/stdio.js"]
-    }
-  }
-}
-```
-
 ## 🎯 Use Cases
 
 ### Revit Workflows
 - **Model QC**: "Capture the current Revit view and analyze for issues"
 - **Documentation**: "Take a screenshot of this floor plan"
-- **Automation**: "Save the current model (Ctrl+S) and switch to 3D view"
 - **Property Analysis**: "Capture the Properties panel and read the element parameters"
 
 ### General Automation
 - **Screen Capture**: Capture any application window or region
-- **Keyboard Control**: Send any key combination or text input
-- **Workflow Automation**: Chain multiple operations together
 
 ### Example Conversations
 
@@ -137,11 +115,6 @@ Cursor: [Automatically captures Revit screen using capture_screen tool]
         - Room boundary overlap on Level 1
         - Unplaced room tag in Room 101
         - Missing ceiling height parameter"
-
-User: "Save the current file and take a screenshot"
-Cursor: [Uses send_keys tool to send Ctrl+S]
-        [Uses capture_screen tool to capture the screen]
-        "I've saved your file and captured the current view."
 ```
 
 ## 🔧 Development
@@ -151,7 +124,7 @@ Cursor: [Uses send_keys tool to send Ctrl+S]
 src/
 ├── tools/
 │   ├── capture-screen.ts    # Real screen capture using PowerShell
-│   └── send-keys.ts         # Real keyboard automation using SendKeys
+│   └── console.ts           # Revit journal access
 ├── package.json             # Dependencies and scripts
 ├── xmcp.config.ts          # XMCP configuration
 └── tsconfig.json           # TypeScript configuration
@@ -181,14 +154,14 @@ curl -X POST http://localhost:3002/mcp \
     }
   }'
 
-# Test send_keys tool  
+# Test revit_journals tool  
 curl -X POST http://localhost:3002/mcp \
   -H "Content-Type: application/json" \
   -d '{
     "method": "tools/call", 
     "params": {
-      "name": "send_keys",
-      "arguments": {"keys": "ctrl+s"}
+      "name": "revit_journals",
+      "arguments": {"action": "list"}
     }
   }'
 ```
@@ -208,21 +181,14 @@ curl -X POST http://localhost:3002/mcp \
 - [x] Multiple image formats (PNG/JPG)
 - [x] Error handling and edge cases
 
-### Phase 3: Keyboard Automation ✅
-- [x] SendKeys-based automation
-- [x] Key combination support
-- [x] Special key handling
-- [x] Text input
-- [x] Configurable delays
-
-### Phase 4: Revit Integration (Next)
+### Phase 3: Revit Integration (Next)
 - [ ] Revit window detection
 - [ ] Revit-specific shortcuts
 - [ ] Property panel capture
 - [ ] Model state analysis
 - [ ] Warning detection
 
-### Phase 5: Advanced Features (Future)
+### Phase 4: Advanced Features (Future)
 - [ ] Window management
 - [ ] Multi-monitor support
 - [ ] Batch operations
@@ -260,11 +226,6 @@ Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
 - Ensure no other applications are blocking screen capture
 - Check if UAC prompts are preventing capture
 - Verify PowerShell can access System.Drawing assemblies
-
-### Keyboard Automation Issues
-- Make sure the target window is active and ready for input
-- Some applications may block SendKeys (security feature)
-- Check for focus issues between windows
 
 ## 📄 License
 
