@@ -1,0 +1,64 @@
+&lt;html&gt;
+&lt;head&gt;
+&lt;title&gt;Claude Computer Use Demo&lt;/title&gt;
+&lt;/head&gt;
+&lt;body&gt;
+&lt;h1&gt;Create Session&lt;/h1&gt;
+&lt;input id="api_key" type="text" placeholder="API Key"&gt;
+&lt;button onclick="createSession()"&gt;Create&lt;/button&gt;
+&lt;div id="chat"&gt;&lt;/div&gt;
+&lt;input id="message" type="text" placeholder="Type message..."&gt;
+&lt;button onclick="sendMessage()"&gt;Send&lt;/button&gt;
+&lt;iframe id="vnc" style="width:1024px; height:768px;" src=""&gt;&lt;/iframe&gt;
+&lt;script&gt;
+let currentSession = null;
+let ws = null;
+
+async function createSession(){
+    const api_key = document.getElementById('api_key').value;
+    const response = await fetch('/sessions', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({model: 'claude-sonnet-4-20250514', provider: 'anthropic', api_key: api_key})
+    });
+    const data = await response.json();
+    currentSession = data.session_id;
+    connectWS();
+    loadMessages();
+    loadVNC();
+}
+
+function connectWS(){
+    ws = new WebSocket(`ws://localhost:8000/ws/${currentSession}`);
+    ws.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        const chat = document.getElementById('chat');
+        chat.innerHTML += `&lt;p&gt;${JSON.stringify(data)}&lt;/p&gt;`;
+    };
+}
+
+async function loadMessages(){
+    const response = await fetch(`/sessions/${currentSession}/messages`);
+    const messages = await response.json();
+    const chat = document.getElementById('chat');
+    chat.innerHTML = messages.map(m => `&lt;p&gt;${m.role}: ${JSON.stringify(m.content)}&lt;/p&gt;`).join('');
+}
+
+async function sendMessage(){
+    const msg = document.getElementById('message').value;
+    await fetch(`/sessions/${currentSession}/messages`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({message: msg})
+    });
+    document.getElementById('message').value = '';
+}
+
+async function loadVNC(){
+    const response = await fetch(`/sessions/${currentSession}/vnc`);
+    const data = await response.json();
+    document.getElementById('vnc').src = data.vnc_url;
+}
+&lt;/script&gt;
+&lt;/body&gt;
+&lt;/html&gt;

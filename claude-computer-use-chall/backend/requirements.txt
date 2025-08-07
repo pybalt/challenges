@@ -1,0 +1,7 @@
+anthropic[bedrock,vertex]>=0.39.0
+fastapi==0.115.0
+uvicorn==0.31.0
+sqlalchemy==2.0.35
+docker==7.1.0
+aiohttp
+aiosqlite
