@@ -514,8 +514,8 @@
             // Map VNC port to agent ID (5900->0, 5901->1, 5902->2)
             const agentId = currentSession.vnc_port - 5900;
             
-            // Use Nginx reverse proxy endpoint with the correct VNC interface path and auto-connect
-            vncFrame.src = `http://localhost:8000/vnc/${agentId}/static/vnc.html?password=password&autoconnect=true`;
+            // Use Nginx reverse proxy endpoint - the agent serves noVNC app at root
+            vncFrame.src = `http://localhost:8000/vnc/${agentId}/`;
             
             // Show loading state
             vncPlaceholder.innerHTML = `
