@@ -1,0 +1,216 @@
+services:
+  # Agent services - pre-created pool of containers
+  agent-1:
+    image: dorowu/ubuntu-desktop-lxde-vnc:latest
+    ports:
+      - "5900:5900"
+      - "6900:80"
+    environment:
+      - VNC_PASSWORD=password
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - RESOLUTION=1024x768
+    networks:
+      - computer-use-network
+    restart: unless-stopped
+
+  agent-2:
+    image: dorowu/ubuntu-desktop-lxde-vnc:latest
+    ports:
+      - "5901:5900"
+      - "6901:80"
+    environment:
+      - VNC_PASSWORD=password
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - RESOLUTION=1024x768
+    networks:
+      - computer-use-network
+    restart: unless-stopped
+
+  agent-3:
+    image: dorowu/ubuntu-desktop-lxde-vnc:latest
+    ports:
+      - "5902:5900"
+      - "6902:80"
+    environment:
+      - VNC_PASSWORD=password
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - RESOLUTION=1024x768
+    networks:
+      - computer-use-network
+    restart: unless-stopped
+
+  backend:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    develop:
+      watch:
+        - action: sync
+          path: ./app
+          target: /app/app
+        - action: sync
+          path: ./frontend
+          target: /app/frontend
+        - action: rebuild
+          path: requirements.txt
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - DATABASE_URL=postgresql+asyncpg://user:password@postgres:5432/computer_use_db
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - API_PROVIDER=${API_PROVIDER:-anthropic}
+      - CONTAINER_MEMORY_LIMIT=${CONTAINER_MEMORY_LIMIT:-2g}
+      - CONTAINER_CPU_COUNT=${CONTAINER_CPU_COUNT:-2}
+      - SQL_DEBUG=${SQL_DEBUG:-false}
+      # DOCKER_HOST not set - use default Docker socket
+      # AWS credentials for Bedrock (if needed)
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_SESSION_TOKEN=${AWS_SESSION_TOKEN}
+      - AWS_REGION=${AWS_REGION}
+      - AWS_PROFILE=${AWS_PROFILE}
+      # Google Cloud credentials for Vertex (if needed)
+      - CLOUD_ML_REGION=${CLOUD_ML_REGION}
+      - ANTHROPIC_VERTEX_PROJECT_ID=${ANTHROPIC_VERTEX_PROJECT_ID}
+      - GOOGLE_APPLICATION_CREDENTIALS=${GOOGLE_APPLICATION_CREDENTIALS}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./logs:/app/logs  # Application logs
+      # AWS credentials (if using Bedrock)
+      - ${HOME}/.aws:/root/.aws:ro
+      # Google Cloud credentials (if using Vertex)
+      - ${HOME}/.config/gcloud:/root/.config/gcloud:ro
+    networks:
+      - computer-use-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_USER=user
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_DB=computer_use_db
+      - POSTGRES_INITDB_ARGS=--encoding=UTF-8 --lc-collate=C --lc-ctype=C
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-scripts:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "5432:5432"
+    networks:
+      - computer-use-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U user -d computer_use_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    command: >
+      postgres 
+      -c shared_preload_libraries=pg_stat_statements
+      -c pg_stat_statements.track=all
+      -c max_connections=200
+      -c shared_buffers=256MB
+      -c effective_cache_size=1GB
+      -c work_mem=4MB
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    networks:
+      - computer-use-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # Optional: Monitoring with Prometheus and Grafana
+  prometheus:
+    image: prom/prometheus:latest
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--storage.tsdb.retention.time=200h'
+      - '--web.enable-lifecycle'
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    networks:
+      - computer-use-network
+    restart: unless-stopped
+    profiles: ["monitoring"]
+
+  grafana:
+    image: grafana/grafana:latest
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    ports:
+      - "3001:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    networks:
+      - computer-use-network
+    restart: unless-stopped
+    profiles: ["monitoring"]
+    depends_on:
+      - prometheus
+
+  # Optional: Nginx reverse proxy for production
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - ./logs/nginx:/var/log/nginx
+    depends_on:
+      - backend
+    networks:
+      - computer-use-network
+    restart: unless-stopped
+    profiles: ["production"]
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+
+
+networks:
+  computer-use-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16

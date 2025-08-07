@@ -1,0 +1,717 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Computer Use Agent Interface</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: #f5f5f5;
+            color: #333;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 1rem 2rem;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .header h1 {
+            font-size: 1.8rem;
+            font-weight: 600;
+        }
+
+        .header p {
+            opacity: 0.9;
+            margin-top: 0.5rem;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        .session-controls {
+            background: white;
+            padding: 1.5rem;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            margin-bottom: 2rem;
+        }
+
+        .controls-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr auto;
+            gap: 1rem;
+            align-items: end;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+        }
+
+        label {
+            font-weight: 500;
+            margin-bottom: 0.5rem;
+            color: #555;
+        }
+
+        input, select {
+            padding: 0.75rem;
+            border: 2px solid #e1e5e9;
+            border-radius: 6px;
+            font-size: 0.95rem;
+            transition: border-color 0.2s;
+        }
+
+        input:focus, select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .btn {
+            padding: 0.75rem 1.5rem;
+            border: none;
+            border-radius: 6px;
+            font-size: 0.95rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-decoration: none;
+            display: inline-block;
+            text-align: center;
+        }
+
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            background: #5a6fd8;
+            transform: translateY(-1px);
+        }
+
+        .btn-danger {
+            background: #e74c3c;
+            color: white;
+        }
+
+        .btn-danger:hover:not(:disabled) {
+            background: #c0392b;
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        .status {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-weight: 500;
+        }
+
+        .status-indicator {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #95a5a6;
+        }
+
+        .status-indicator.active {
+            background: #27ae60;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+
+        .main-content {
+            display: grid;
+            grid-template-columns: 1fr 2fr;
+            gap: 2rem;
+            min-height: 600px;
+        }
+
+        .chat-panel, .vnc-panel {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+
+        .panel-header {
+            background: #f8f9fa;
+            padding: 1rem 1.5rem;
+            border-bottom: 1px solid #e1e5e9;
+            font-weight: 600;
+            color: #555;
+        }
+
+        .messages {
+            height: 400px;
+            overflow-y: auto;
+            padding: 1rem;
+        }
+
+        .message {
+            margin-bottom: 1rem;
+            padding: 0.75rem 1rem;
+            border-radius: 8px;
+            max-width: 85%;
+            word-wrap: break-word;
+        }
+
+        .message.user {
+            background: #e3f2fd;
+            margin-left: auto;
+            border-bottom-right-radius: 4px;
+        }
+
+        .message.assistant {
+            background: #f3e5f5;
+            border-bottom-left-radius: 4px;
+        }
+
+        .message.system {
+            background: #fff3e0;
+            text-align: center;
+            max-width: 100%;
+            font-style: italic;
+        }
+
+        .message-meta {
+            font-size: 0.8rem;
+            color: #666;
+            margin-top: 0.25rem;
+        }
+
+        .input-area {
+            padding: 1rem;
+            border-top: 1px solid #e1e5e9;
+            display: flex;
+            gap: 0.75rem;
+        }
+
+        .input-area input {
+            flex: 1;
+            margin: 0;
+        }
+
+        .vnc-container {
+            height: 600px;
+            position: relative;
+            background: #000;
+        }
+
+        .vnc-frame {
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+
+        .vnc-placeholder {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            color: #666;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .vnc-placeholder svg {
+            width: 64px;
+            height: 64px;
+            opacity: 0.5;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255,255,255,.3);
+            border-radius: 50%;
+            border-top-color: #fff;
+            animation: spin 1s ease-in-out infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .error {
+            background: #ffebee;
+            color: #c62828;
+            padding: 1rem;
+            border-radius: 6px;
+            margin: 1rem 0;
+            border-left: 4px solid #c62828;
+        }
+
+        .success {
+            background: #e8f5e8;
+            color: #2e7d32;
+            padding: 1rem;
+            border-radius: 6px;
+            margin: 1rem 0;
+            border-left: 4px solid #2e7d32;
+        }
+
+        .session-info {
+            background: #f8f9fa;
+            padding: 1rem;
+            border-radius: 6px;
+            margin-bottom: 1rem;
+            font-size: 0.9rem;
+        }
+
+        .session-info strong {
+            color: #333;
+        }
+
+        @media (max-width: 768px) {
+            .main-content {
+                grid-template-columns: 1fr;
+            }
+            
+            .controls-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .container {
+                padding: 1rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Computer Use Agent Interface</h1>
+        <p>Scalable backend with session management and real-time communication</p>
+    </div>
+
+    <div class="container">
+        <div class="session-controls">
+            <div class="controls-grid">
+                <div class="form-group">
+                    <label for="userId">User ID</label>
+                    <input type="text" id="userId" value="demo-user" placeholder="Enter user ID">
+                </div>
+                
+                <div class="form-group">
+                    <label for="modelSelect">Model</label>
+                    <select id="modelSelect">
+                        <option value="claude-sonnet-4-20250514">Claude 4 Sonnet</option>
+                        <option value="claude-opus-4-20250514">Claude 4 Opus</option>
+                        <option value="claude-3-7-sonnet-20250219">Claude 3.7 Sonnet</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label for="screenSize">Screen Size</label>
+                    <select id="screenSize">
+                        <option value="1024x768">1024x768 (XGA)</option>
+                        <option value="1280x720">1280x720 (HD)</option>
+                        <option value="1920x1080">1920x1080 (FHD)</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <button class="btn btn-primary" onclick="createSession()" id="createBtn">
+                        <span id="createBtnText">Create Session</span>
+                        <div class="loading" id="createLoading" style="display: none;"></div>
+                    </button>
+                    <button class="btn btn-danger" onclick="endSession()" id="endBtn" disabled style="margin-top: 0.5rem;">
+                        End Session
+                    </button>
+                </div>
+            </div>
+            
+            <div class="status" id="status">
+                <div class="status-indicator" id="statusIndicator"></div>
+                <span id="statusText">No active session</span>
+            </div>
+            
+            <div id="sessionInfo" class="session-info" style="display: none;">
+                <strong>Session ID:</strong> <span id="sessionId">-</span><br>
+                <strong>VNC Port:</strong> <span id="vncPort">-</span><br>
+                <strong>Created:</strong> <span id="createdAt">-</span>
+            </div>
+        </div>
+
+        <div id="errorContainer"></div>
+
+        <div class="main-content">
+            <div class="chat-panel">
+                <div class="panel-header">
+                    💬 Chat Interface
+                </div>
+                <div class="messages" id="messages"></div>
+                <div class="input-area">
+                    <input type="text" id="messageInput" placeholder="Enter your message..." disabled>
+                    <button class="btn btn-primary" onclick="sendMessage()" id="sendBtn" disabled>Send</button>
+                </div>
+            </div>
+            
+            <div class="vnc-panel">
+                <div class="panel-header">
+                    🖥️ Desktop View
+                </div>
+                <div class="vnc-container">
+                    <div class="vnc-placeholder" id="vncPlaceholder">
+                        <svg viewBox="0 0 24 24" fill="currentColor">
+                            <path d="M21 2H3c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h7l-2 3v1h8v-1l-2-3h7c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 12H3V4h18v10z"/>
+                        </svg>
+                        <p>No active session</p>
+                    </div>
+                    <iframe id="vncFrame" class="vnc-frame" style="display: none;"></iframe>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentSession = null;
+        let websocket = null;
+        const API_BASE = window.location.origin;
+
+        // Utility functions
+        function showError(message) {
+            const container = document.getElementById('errorContainer');
+            container.innerHTML = `<div class="error">${message}</div>`;
+            setTimeout(() => container.innerHTML = '', 5000);
+        }
+
+        function showSuccess(message) {
+            const container = document.getElementById('errorContainer');
+            container.innerHTML = `<div class="success">${message}</div>`;
+            setTimeout(() => container.innerHTML = '', 3000);
+        }
+
+        function updateStatus(text, active = false) {
+            document.getElementById('statusText').textContent = text;
+            const indicator = document.getElementById('statusIndicator');
+            indicator.className = `status-indicator ${active ? 'active' : ''}`;
+        }
+
+        function setLoading(loading) {
+            const createBtn = document.getElementById('createBtn');
+            const createBtnText = document.getElementById('createBtnText');
+            const createLoading = document.getElementById('createLoading');
+            
+            createBtn.disabled = loading;
+            createBtnText.style.display = loading ? 'none' : 'inline';
+            createLoading.style.display = loading ? 'inline-block' : 'none';
+        }
+
+        // Session management
+        async function createSession() {
+            const userId = document.getElementById('userId').value.trim();
+            const model = document.getElementById('modelSelect').value;
+            const screenSize = document.getElementById('screenSize').value;
+            
+            if (!userId) {
+                showError('Please enter a User ID');
+                return;
+            }
+
+            const [width, height] = screenSize.split('x').map(Number);
+            
+            setLoading(true);
+            
+            try {
+                console.log('Creating session with:', { userId, model, width, height });
+                
+                // Show progress message
+                showSuccess('Creating session... This may take 1-2 minutes on first run while downloading the agent image.');
+                
+                // Create abort controller for timeout
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 180000); // 3 minutes
+                
+                const response = await fetch(`${API_BASE}/api/v1/sessions/`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        user_id: userId,
+                        model: model,
+                        screen_width: width,
+                        screen_height: height
+                    }),
+                    signal: controller.signal
+                });
+                
+                clearTimeout(timeoutId);
+                console.log('Response status:', response.status);
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.detail || 'Failed to create session');
+                }
+
+                currentSession = await response.json();
+                
+                // Update UI
+                updateStatus(`Session ${currentSession.session_id.substring(0, 8)}... active`, true);
+                document.getElementById('createBtn').disabled = true;
+                document.getElementById('endBtn').disabled = false;
+                document.getElementById('messageInput').disabled = false;
+                document.getElementById('sendBtn').disabled = false;
+
+                // Show session info
+                const sessionInfo = document.getElementById('sessionInfo');
+                document.getElementById('sessionId').textContent = currentSession.session_id;
+                document.getElementById('vncPort').textContent = currentSession.vnc_port;
+                document.getElementById('createdAt').textContent = new Date(currentSession.created_at).toLocaleString();
+                sessionInfo.style.display = 'block';
+
+                // Setup VNC
+                setupVNC();
+
+                // Setup WebSocket
+                connectWebSocket();
+
+                showSuccess('Session created successfully!');
+
+            } catch (error) {
+                console.error('Error creating session:', error);
+                if (error.name === 'AbortError') {
+                    showError('Session creation timed out. The server may be downloading the agent image. Please try again in a few minutes.');
+                } else if (error.name === 'TypeError' && error.message.includes('fetch')) {
+                    showError('Network error: Could not connect to backend. Is the server running?');
+                } else {
+                    showError(error.message || 'Unknown error occurred');
+                }
+            } finally {
+                setLoading(false);
+            }
+        }
+
+        function setupVNC() {
+            if (!currentSession) return;
+            
+            const vncFrame = document.getElementById('vncFrame');
+            const vncPlaceholder = document.getElementById('vncPlaceholder');
+            
+            // Map VNC port to agent ID (5900->0, 5901->1, 5902->2)
+            const agentId = currentSession.vnc_port - 5900;
+            
+            // Use Nginx reverse proxy endpoint with the correct VNC interface path
+            vncFrame.src = `http://localhost:8000/vnc/${agentId}/static/vnc.html`;
+            
+            // Show loading state
+            vncPlaceholder.innerHTML = `
+                <div class="loading"></div>
+                <p>Loading desktop environment via proxy...</p>
+            `;
+            
+            // Hide placeholder and show frame after a delay
+            setTimeout(() => {
+                vncPlaceholder.style.display = 'none';
+                vncFrame.style.display = 'block';
+            }, 5000);
+        }
+
+        function connectWebSocket() {
+            if (!currentSession) return;
+
+            const wsUrl = `ws://localhost:8000/ws/${currentSession.session_id}`;
+            websocket = new WebSocket(wsUrl);
+
+            websocket.onopen = () => {
+                console.log('WebSocket connected');
+                displayMessage('Connected to agent session', 'system');
+            };
+
+            websocket.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    handleWebSocketMessage(data);
+                } catch (error) {
+                    console.error('Error parsing WebSocket message:', error);
+                }
+            };
+
+            websocket.onclose = () => {
+                console.log('WebSocket disconnected');
+                displayMessage('Disconnected from agent session', 'system');
+            };
+
+            websocket.onerror = (error) => {
+                console.error('WebSocket error:', error);
+                displayMessage('WebSocket connection error', 'system');
+            };
+        }
+
+        function handleWebSocketMessage(data) {
+            switch (data.type) {
+                case 'connection':
+                    console.log('Connection confirmed:', data);
+                    break;
+                case 'user_message':
+                    // Don't display user messages from WebSocket (already displayed locally)
+                    break;
+                case 'agent_message':
+                    displayMessage(data.content, 'assistant', data.timestamp);
+                    break;
+                case 'session_ended':
+                    displayMessage(data.message, 'system');
+                    resetSession();
+                    break;
+                case 'session_restarted':
+                    displayMessage(data.message, 'system');
+                    setupVNC(); // Reload VNC
+                    break;
+                case 'error':
+                    displayMessage(`Error: ${data.message}`, 'system');
+                    break;
+                default:
+                    console.log('Unknown WebSocket message type:', data.type);
+            }
+        }
+
+        async function endSession() {
+            if (!currentSession) return;
+
+            try {
+                const response = await fetch(`${API_BASE}/api/v1/sessions/${currentSession.session_id}`, {
+                    method: 'DELETE'
+                });
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.detail || 'Failed to end session');
+                }
+
+                showSuccess('Session ended successfully');
+                resetSession();
+
+            } catch (error) {
+                console.error('Error ending session:', error);
+                showError(error.message);
+            }
+        }
+
+        function resetSession() {
+            currentSession = null;
+            
+            if (websocket) {
+                websocket.close();
+                websocket = null;
+            }
+
+            // Update UI
+            updateStatus('No active session', false);
+            document.getElementById('createBtn').disabled = false;
+            document.getElementById('endBtn').disabled = true;
+            document.getElementById('messageInput').disabled = true;
+            document.getElementById('sendBtn').disabled = true;
+            
+            // Hide session info
+            document.getElementById('sessionInfo').style.display = 'none';
+
+            // Reset VNC
+            const vncFrame = document.getElementById('vncFrame');
+            const vncPlaceholder = document.getElementById('vncPlaceholder');
+            vncFrame.style.display = 'none';
+            vncFrame.src = 'about:blank';
+            vncPlaceholder.style.display = 'flex';
+            vncPlaceholder.innerHTML = `
+                <svg viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M21 2H3c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h7l-2 3v1h8v-1l-2-3h7c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 12H3V4h18v10z"/>
+                </svg>
+                <p>No active session</p>
+            `;
+
+            // Clear messages
+            document.getElementById('messages').innerHTML = '';
+        }
+
+        // Chat functions
+        async function sendMessage() {
+            const input = document.getElementById('messageInput');
+            const message = input.value.trim();
+            
+            if (!message || !currentSession) return;
+
+            // Display user message immediately
+            displayMessage(message, 'user');
+            input.value = '';
+
+            try {
+                const response = await fetch(`${API_BASE}/api/v1/sessions/${currentSession.session_id}/messages`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        content: message,
+                        type: 'user'
+                    })
+                });
+
+                if (!response.ok) {
+                    const error = await response.json();
+                    throw new Error(error.detail || 'Failed to send message');
+                }
+
+                // Message will be handled via WebSocket
+
+            } catch (error) {
+                console.error('Error sending message:', error);
+                displayMessage(`Error sending message: ${error.message}`, 'system');
+            }
+        }
+
+        function displayMessage(content, type, timestamp) {
+            const messages = document.getElementById('messages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${type}`;
+            
+            const contentDiv = document.createElement('div');
+            contentDiv.textContent = content;
+            messageDiv.appendChild(contentDiv);
+            
+            if (timestamp) {
+                const metaDiv = document.createElement('div');
+                metaDiv.className = 'message-meta';
+                metaDiv.textContent = new Date(timestamp).toLocaleTimeString();
+                messageDiv.appendChild(metaDiv);
+            }
+            
+            messages.appendChild(messageDiv);
+            messages.scrollTop = messages.scrollHeight;
+        }
+
+        // Event listeners
+        document.getElementById('messageInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                sendMessage();
+            }
+        });
+
+        // Initialize
+        console.log('Computer Use Agent Interface loaded');
+        displayMessage('Welcome! Create a session to start interacting with the computer use agent.', 'system');
+    </script>
+</body>
+</html>
