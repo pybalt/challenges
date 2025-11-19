@@ -32,3 +32,5 @@ CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions (user_id);
 CREATE INDEX IF NOT EXISTS idx_chat_history_session_id ON chat_history (session_id);
 
 
+
+
